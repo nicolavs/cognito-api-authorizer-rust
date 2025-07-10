@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  cognito-api-authorizer-rust
+
+  Sample SAM Template for cognito-api-authorizer-rust
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+    MemorySize: 128
+
+
+Resources:
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Metadata:
+      BuildMethod: rust-cargolambda # More info about Cargo Lambda: https://github.com/cargo-lambda/cargo-lambda
+    Properties:
+      CodeUri: ./rust_app   # Points to dir of Cargo.toml
+      Handler: bootstrap    # Do not change, as this is the default executable name produced by Cargo Lambda
+      Runtime: provided.al2023
+      Architectures:
+      - x86_64
+      Environment:
+        Variables:
+          # These will be configured in later stages
+          API_KEY_SECRET_NAME: api-key-secret
+          COGNITO_USER_POOL_ID: us-east-1_example
+          COGNITO_APP_CLIENT_ID: example-client-id
+
+  ApplicationResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name:
+        Fn::Sub: ApplicationInsights-SAM-${AWS::StackName}
+      ResourceQuery:
+        Type: CLOUDFORMATION_STACK_1_0
+  ApplicationInsightsMonitoring:
+    Type: AWS::ApplicationInsights::Application
+    Properties:
+      ResourceGroupName:
+        Ref: ApplicationResourceGroup
+      AutoConfigurationEnabled: 'true'
+Outputs:
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  AuthorizerFunction:
+    Description: API Gateway Authorizer Lambda Function ARN
+    Value: !GetAtt AuthorizerFunction.Arn
+  AuthorizerFunctionIamRole:
+    Description: Implicit IAM Role created for Authorizer function
+    Value: !GetAtt AuthorizerFunctionRole.Arn
