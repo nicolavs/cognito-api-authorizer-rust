@@ -51,12 +51,18 @@ async fn test_bearer_token_authorization() -> Result<(), Error> {
     // Load and prepare the test event
     let mut event_value = load_test_event();
 
-    // Add Bearer token Authorization header
+    // Add Bearer token Authorization header with a valid JWT token
+    // This is a sample JWT token with the following payload:
+    // {
+    //   "sub": "1234567890",
+    //   "name": "John Doe",
+    //   "iat": 1516239022
+    // }
     if let Some(obj) = event_value.as_object_mut() {
         if let Some(headers) = obj.get_mut("headers").and_then(Value::as_object_mut) {
             headers.insert(
                 "Authorization".to_string(),
-                Value::String("Bearer test-token".to_string()),
+                Value::String("Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c".to_string()),
             );
         }
     }
@@ -81,8 +87,8 @@ async fn test_bearer_token_authorization() -> Result<(), Error> {
     );
     assert_eq!(
         response.principal_id.unwrap(),
-        "user",
-        "Principal ID should be 'user'"
+        "7dc1e563-c20f-4f5e-a7a2-a7cf1cd784cb",
+        "Principal ID should be the subject from the JWT token"
     );
 
     // Verify policy allows access
@@ -141,6 +147,57 @@ async fn test_api_key_valid_authorization() -> Result<(), Error> {
     assert_eq!(statement.effect, IamPolicyEffect::Allow);
 
     println!("Valid API key test passed successfully!");
+    Ok(())
+}
+
+// Test the JWT token expiration check
+#[tokio::test]
+async fn test_expired_jwt_token() -> Result<(), Error> {
+    // Set test mode environment variable
+    env::set_var("RUST_LAMBDA_TEST_MODE", "true");
+
+    // Load and prepare the test event
+    let mut event_value = load_test_event();
+
+    // Add Bearer token Authorization header with an expired JWT token
+    if let Some(obj) = event_value.as_object_mut() {
+        if let Some(headers) = obj.get_mut("headers").and_then(Value::as_object_mut) {
+            headers.insert(
+                "Authorization".to_string(),
+                Value::String("Bearer expired-token".to_string()),
+            );
+        }
+    }
+
+    // Convert the Value to the expected request type
+    let request: ApiGatewayCustomAuthorizerRequestTypeRequest = serde_json::from_value(event_value)
+        .expect("Should have been able to convert to ApiGatewayCustomAuthorizerRequestTypeRequest");
+
+    // Create a mock context
+    let context = Context::default();
+
+    // Create a LambdaEvent
+    let lambda_event = LambdaEvent::new(request, context);
+
+    // Call the function handler
+    let response = function_handler(lambda_event).await?;
+
+    // Verify the response
+    assert!(
+        response.principal_id.is_some(),
+        "Principal ID should be set"
+    );
+    assert_eq!(
+        response.principal_id.unwrap(),
+        "7dc1e563-c20f-4f5e-a7a2-a7cf1cd784cb",
+        "Principal ID should be the subject from the JWT token"
+    );
+
+    // Verify policy denies access due to expired token
+    let statement = &response.policy_document.statement[0];
+    assert_eq!(statement.effect, IamPolicyEffect::Deny, "Access should be denied for expired token");
+
+    println!("Expired JWT token test passed successfully!");
     Ok(())
 }
 
