@@ -1,15 +1,17 @@
+use std::env;
 use std::fs;
 use std::path::Path;
 
 use aws_lambda_events::apigw::ApiGatewayCustomAuthorizerRequestTypeRequest;
+use aws_lambda_events::event::iam::IamPolicyEffect;
 use lambda_runtime::{Context, Error, LambdaEvent};
 use serde_json::Value;
 
 // Import the function_handler from the main crate
 use cognito_api_authorizer_rust::function_handler;
 
-#[tokio::test]
-async fn test_authorizer_with_event_json() -> Result<(), Error> {
+// Helper function to load and prepare the test event
+fn load_test_event() -> Value {
     // Load the test event from the file
     let event_path = Path::new("../events/authorizer-event.json");
     println!(
@@ -35,7 +37,22 @@ async fn test_authorizer_with_event_json() -> Result<(), Error> {
             let arn_value = obj.remove("methodArn").unwrap();
             obj.insert("method_arn".to_string(), arn_value);
         }
-        // Add Authorization header for testing
+    }
+
+    event_value
+}
+
+// Test the Bearer token path
+#[tokio::test]
+async fn test_bearer_token_authorization() -> Result<(), Error> {
+    // Set test mode environment variable
+    env::set_var("RUST_LAMBDA_TEST_MODE", "true");
+
+    // Load and prepare the test event
+    let mut event_value = load_test_event();
+
+    // Add Bearer token Authorization header
+    if let Some(obj) = event_value.as_object_mut() {
         if let Some(headers) = obj.get_mut("headers").and_then(Value::as_object_mut) {
             headers.insert(
                 "Authorization".to_string(),
@@ -70,11 +87,110 @@ async fn test_authorizer_with_event_json() -> Result<(), Error> {
 
     // Verify policy allows access
     let statement = &response.policy_document.statement[0];
+    assert_eq!(statement.effect, IamPolicyEffect::Allow);
+
+    println!("Bearer token test passed successfully!");
+    Ok(())
+}
+
+// Test the API key validation path with valid API key
+#[tokio::test]
+async fn test_api_key_valid_authorization() -> Result<(), Error> {
+    // Set test mode environment variable
+    env::set_var("RUST_LAMBDA_TEST_MODE", "true");
+
+    // Load and prepare the test event
+    let mut event_value = load_test_event();
+
+    // Add API key Authorization header (matching the test API key)
+    if let Some(obj) = event_value.as_object_mut() {
+        if let Some(headers) = obj.get_mut("headers").and_then(Value::as_object_mut) {
+            headers.insert(
+                "Authorization".to_string(),
+                Value::String("test-api-key".to_string()),
+            );
+        }
+    }
+
+    // Convert the Value to the expected request type
+    let request: ApiGatewayCustomAuthorizerRequestTypeRequest = serde_json::from_value(event_value)
+        .expect("Should have been able to convert to ApiGatewayCustomAuthorizerRequestTypeRequest");
+
+    // Create a mock context
+    let context = Context::default();
+
+    // Create a LambdaEvent
+    let lambda_event = LambdaEvent::new(request, context);
+
+    // Call the function handler
+    let response = function_handler(lambda_event).await?;
+
+    // Verify the response
+    assert!(
+        response.principal_id.is_some(),
+        "Principal ID should be set"
+    );
     assert_eq!(
-        statement.effect,
-        aws_lambda_events::event::iam::IamPolicyEffect::Allow
+        response.principal_id.unwrap(),
+        "apikey",
+        "Principal ID should be 'apikey'"
     );
 
-    println!("Test passed successfully!");
+    // Verify policy allows access
+    let statement = &response.policy_document.statement[0];
+    assert_eq!(statement.effect, IamPolicyEffect::Allow);
+
+    println!("Valid API key test passed successfully!");
+    Ok(())
+}
+
+// Test the API key validation path with invalid API key
+#[tokio::test]
+async fn test_api_key_invalid_authorization() -> Result<(), Error> {
+    // Set test mode environment variable
+    env::set_var("RUST_LAMBDA_TEST_MODE", "true");
+
+    // Load and prepare the test event
+    let mut event_value = load_test_event();
+
+    // Add invalid API key Authorization header
+    if let Some(obj) = event_value.as_object_mut() {
+        if let Some(headers) = obj.get_mut("headers").and_then(Value::as_object_mut) {
+            headers.insert(
+                "Authorization".to_string(),
+                Value::String("invalid-api-key".to_string()),
+            );
+        }
+    }
+
+    // Convert the Value to the expected request type
+    let request: ApiGatewayCustomAuthorizerRequestTypeRequest = serde_json::from_value(event_value)
+        .expect("Should have been able to convert to ApiGatewayCustomAuthorizerRequestTypeRequest");
+
+    // Create a mock context
+    let context = Context::default();
+
+    // Create a LambdaEvent
+    let lambda_event = LambdaEvent::new(request, context);
+
+    // Call the function handler
+    let response = function_handler(lambda_event).await?;
+
+    // Verify the response
+    assert!(
+        response.principal_id.is_some(),
+        "Principal ID should be set"
+    );
+    assert_eq!(
+        response.principal_id.unwrap(),
+        "unauthorized",
+        "Principal ID should be 'unauthorized'"
+    );
+
+    // Verify policy denies access
+    let statement = &response.policy_document.statement[0];
+    assert_eq!(statement.effect, IamPolicyEffect::Deny);
+
+    println!("Invalid API key test passed successfully!");
     Ok(())
 }
