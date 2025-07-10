@@ -12,13 +12,18 @@ use cognito_api_authorizer_rust::function_handler;
 async fn test_authorizer_with_event_json() -> Result<(), Error> {
     // Load the test event from the file
     let event_path = Path::new("../events/authorizer-event.json");
-    println!("Looking for event file at: {:?}", event_path.canonicalize().unwrap_or_else(|_| Path::new("not found").to_path_buf()));
-    let event_json = fs::read_to_string(event_path)
-        .expect("Should have been able to read the event file");
+    println!(
+        "Looking for event file at: {:?}",
+        event_path
+            .canonicalize()
+            .unwrap_or_else(|_| Path::new("not found").to_path_buf())
+    );
+    let event_json =
+        fs::read_to_string(event_path).expect("Should have been able to read the event file");
 
     // Parse the JSON into a Value
-    let mut event_value: Value = serde_json::from_str(&event_json)
-        .expect("Should have been able to parse the event JSON");
+    let mut event_value: Value =
+        serde_json::from_str(&event_json).expect("Should have been able to parse the event JSON");
 
     // Convert field names from camelCase to snake_case for Rust struct compatibility
     if let Some(obj) = event_value.as_object_mut() {
@@ -53,12 +58,22 @@ async fn test_authorizer_with_event_json() -> Result<(), Error> {
     let response = function_handler(lambda_event).await?;
 
     // Verify the response
-    assert!(response.principal_id.is_some(), "Principal ID should be set");
-    assert_eq!(response.principal_id.unwrap(), "user", "Principal ID should be 'user'");
+    assert!(
+        response.principal_id.is_some(),
+        "Principal ID should be set"
+    );
+    assert_eq!(
+        response.principal_id.unwrap(),
+        "user",
+        "Principal ID should be 'user'"
+    );
 
     // Verify policy allows access
     let statement = &response.policy_document.statement[0];
-    assert_eq!(statement.effect, aws_lambda_events::event::iam::IamPolicyEffect::Allow);
+    assert_eq!(
+        statement.effect,
+        aws_lambda_events::event::iam::IamPolicyEffect::Allow
+    );
 
     println!("Test passed successfully!");
     Ok(())
