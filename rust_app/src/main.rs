@@ -6,7 +6,7 @@ use aws_lambda_events::apigw::{
 use aws_lambda_events::event::iam::{IamPolicyEffect, IamPolicyStatement};
 use aws_sdk_cognitoidentityprovider::Client as CognitoClient;
 use aws_sdk_secretsmanager::Client as SecretsManagerClient;
-use jsonwebtoken::{decode, errors::Error as JwtError, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use lambda_runtime::{service_fn, Error, LambdaEvent};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
@@ -338,14 +338,14 @@ pub async fn function_handler(
                 .as_secs();
 
             if let Some(exp) = claims.expiration {
-                if current_time > exp {
-                    // Token is expired
-                    warn!(
-                        "JWT token is expired. Expiration: {}, Current time: {}",
+                if current_time <= exp {
+                    // Token is valid
+                    info!(
+                        "JWT token is valid. Expiration: {}, Current time: {}",
                         exp, current_time
                     );
 
-                    let policy = create_policy(IamPolicyEffect::Deny, &method_arn);
+                    let policy = create_policy(IamPolicyEffect::Allow, &method_arn);
 
                     let response = ApiGatewayCustomAuthorizerResponse {
                         principal_id: Some(principal_id),
@@ -356,9 +356,9 @@ pub async fn function_handler(
 
                     return Ok(response);
                 } else {
-                    // Token is not expired
-                    info!(
-                        "JWT token is valid. Expiration: {}, Current time: {}",
+                    // Token expired
+                    warn!(
+                        "JWT token is expired. Expiration: {}, Current time: {}",
                         exp, current_time
                     );
                 }
@@ -367,7 +367,7 @@ pub async fn function_handler(
                 info!("JWT token has no expiration claim");
             }
 
-            let policy = create_policy(IamPolicyEffect::Allow, &method_arn);
+            let policy = create_policy(IamPolicyEffect::Deny, &method_arn);
 
             let response = ApiGatewayCustomAuthorizerResponse {
                 principal_id: Some(principal_id),
