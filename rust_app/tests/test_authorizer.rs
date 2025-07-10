@@ -195,7 +195,11 @@ async fn test_expired_jwt_token() -> Result<(), Error> {
 
     // Verify policy denies access due to expired token
     let statement = &response.policy_document.statement[0];
-    assert_eq!(statement.effect, IamPolicyEffect::Deny, "Access should be denied for expired token");
+    assert_eq!(
+        statement.effect,
+        IamPolicyEffect::Deny,
+        "Access should be denied for expired token"
+    );
 
     println!("Expired JWT token test passed successfully!");
     Ok(())

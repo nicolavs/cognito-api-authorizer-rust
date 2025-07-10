@@ -79,7 +79,7 @@ async fn decode_jwt(token: &str) -> Result<JwtClaims, Error> {
             // Return the expected claims for our valid test token with future expiration
             let expiration = current_time + 3600; // 1 hour from now
 
-            let mut claims = JwtClaims {
+            let claims = JwtClaims {
                 subject: Some("7dc1e563-c20f-4f5e-a7a2-a7cf1cd784cb".to_string()),
                 issuer: Some("https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_abcdeFG".to_string()),
                 audience: Some("7mr38pechbp42ptnb6rhm7s9qa".to_string()),
@@ -105,7 +105,7 @@ async fn decode_jwt(token: &str) -> Result<JwtClaims, Error> {
             // Return the expected claims for our expired test token
             let expiration = current_time - 3600; // 1 hour ago (expired)
 
-            let mut claims = JwtClaims {
+            let claims = JwtClaims {
                 subject: Some("7dc1e563-c20f-4f5e-a7a2-a7cf1cd784cb".to_string()),
                 issuer: Some("https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_abcdeFG".to_string()),
                 audience: Some("7mr38pechbp42ptnb6rhm7s9qa".to_string()),
